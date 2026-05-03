@@ -15,26 +15,8 @@ export default function Home() {
 
   // 좌석 목록 불러오기
   useEffect(() => {
-  fetchSeats()
-
-  // 실시간 구독 시작
-  const channel = supabase
-    .channel('seats-channel')
-    .on(
-      'postgres_changes',
-      { event: 'UPDATE', schema: 'public', table: 'seats' },
-      (payload) => {
-        console.log('변경 감지!', payload)
-        fetchSeats() // DB 바뀌면 자동으로 새로고침
-      }
-    )
-    .subscribe()
-
-  // 페이지 나갈 때 구독 해제
-  return () => {
-    supabase.removeChannel(channel)
-  }
-}, [])
+    fetchSeats()
+  }, [])
 
   const fetchSeats = async () => {
     const { data, error } = await supabase
@@ -48,26 +30,23 @@ export default function Home() {
 
   // 좌석 예약하기
   const reserveSeat = async (seatId: number) => {
-  setLoading(true)
+    setLoading(true)
 
-  const { data, error } = await supabase  
-    .from('seats')
-    .update({ is_reserved: true })
-    .eq('id', seatId)
-    .eq('is_reserved', false)
-    .select() // 실제로 업데이트된 행 반환
+    const { error } = await supabase
+      .from('seats')
+      .update({ is_reserved: true })
+      .eq('id', seatId)
+      .eq('is_reserved', false) // 이미 예약된 좌석은 업데이트 안 됨 (동시성 처리)
 
-  if (error) {
-    alert('예약 실패! (오류 발생)')
-  } else if (data && data.length > 0) {
-    alert('예약 성공! ✅') // 실제로 업데이트된 경우에만
-  } else {
-    alert('예약 실패! ❌ (이미 예약된 좌석입니다)') // 업데이트된 행이 없으면 실패
+    if (error) {
+      alert('예약 실패!')
+    } else {
+      alert('예약 성공!')
+      fetchSeats() // 목록 새로고침
+    }
+
+    setLoading(false)
   }
-
-  fetchSeats()
-  setLoading(false)
-}
 
   return (
     <main className="p-8">
