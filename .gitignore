@@ -39,3 +39,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# 개인용 학습 노트 (팀 공유 X)
+LEARNING.md
+HOW_TO_LEARN.md
+
+# Claude Code 세션 리포트 (대화 내용 포함, 민감)
+session-report-*.html
