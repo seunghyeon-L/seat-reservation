@@ -96,7 +96,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 **기간:** 2개월 캡스톤
 
-**중요:** 팀원 4명 전부 기술 스택 거의 전무. React/Next.js/Supabase 처음 사용. 나(승현)도 일주일 만에 처음 배움.
+**중요:** 팀원 4명 전부 기술 스택 거의 전무. React/Next.js/Supabase 처음 사용. 
 
 ---
 
