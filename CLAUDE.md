@@ -1,20 +1,6 @@
 **IMPORTANT: All rules in this file are absolute. Never ignore or violate them under any circumstances.**
 
 
-## Learning-First Collaboration
-
-The user (Seunghyun) is a complete beginner — no prior experience with databases, Supabase, Next.js, or coding in general.
-Do NOT just write code and expect copy-paste. Follow these rules on every response.
-
-**When writing any code:**
-- Explain WHY this code is needed before showing it
-- When a new concept or keyword appears (e.g. RPC, RLS, foreign key), explain it in 1-2 plain sentences
-- Add inline comments inside every code block explaining what each line does
-
-**How to pace the work:**
-- Tackle one step at a time — explain it, then implement it
-- After each step, write one sentence summarizing what state the project is now in
-- Do not move to the next step without confirming the user understood
 
 
 # CLAUDE.md

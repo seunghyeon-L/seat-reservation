@@ -20,6 +20,16 @@
 - `app/page.tsx`에서 RPC 호출로 변경
 - k6 부하테스트 500 VU → **1 성공 / 499 거절** (DB 직접 검증 완료)
 
+### Day 3 — pg_cron 자동 만료
+- pg_cron 익스텐션 활성화
+- `expire_held_seats()` 함수 작성
+- 매 1분 cron 등록 (`expire-held-seats`)
+- 시간 강제 변경으로 동작 검증 완료
+
+### Day 4 — 추가 RPC 함수
+- `cancel_seat(p_seat_id, p_user_id)` — 선점 취소 + cancelled_at 기록
+- `get_my_holds(p_user_id)` — 본인의 활성 HOLD 예약 조회
+
 ### 문서
 - `migrations/001~005.sql` — DB 변경 이력
 - `SCHEMA.md` — 현재 DB 상태 (백 2 공유용)
@@ -31,18 +41,10 @@
 
 ## ⏳ 다음 작업
 
-### Day 3 — pg_cron 자동 만료
-- `holding_until < NOW()`인 HOLD 좌석을 1분마다 자동으로 AVAILABLE로 풀기
-- pg_cron 익스텐션 활성화 + 스케줄 설정
-- 시간 조작해서 cron 동작 검증
-
-### Day 4 — 추가 API
-- 좌석 조회 API (내가 hold 중인 것만)
-- 선점 취소 API (`cancelled_at` 기록)
-
 ### Day 5 — 마무리
-- 노쇼 시나리오 통합 테스트
+- 노쇼 시나리오 통합 테스트 (10분 안 가면 자동 해제 + 패널티 — 패널티는 백 2)
 - RLS 정책 추가 (남의 예약 못 보게)
+- 동일 유저 다중 좌석 선점 차단 (백 2 영역이지만 본인도 인지)
 
 ---
 

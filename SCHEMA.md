@@ -23,12 +23,13 @@
 | 컬럼 | 타입 | NULL? | 기본값 | 설명 |
 |------|------|-------|--------|------|
 | `id` | BIGINT | NO | (자동증가) | PK |
-| `seat_number` | INTEGER | NO | - | 좌석 번호 (1~30) |
+| `seat_number` | INTEGER | NO | - | 좌석 번호 (1~30, UNIQUE) |
 | `status` | TEXT | NO | `'AVAILABLE'` | `AVAILABLE` / `HOLD` / `OCCUPIED` (CHECK 제약) |
 | `holding_until` | TIMESTAMPTZ | YES | NULL | HOLD 시 만료 시각 (NOW + 10분) |
 
 ### 제약 조건
 - `CHECK (status IN ('AVAILABLE', 'HOLD', 'OCCUPIED'))`
+- `UNIQUE (seat_number)`
 
 ### RLS
 - ⚠️ **현재 비활성화.** Supabase 보안 경고 발생 중. Day 5에 정책 추가 예정.
@@ -78,6 +79,59 @@
 - 실패: `{ "success": false, "message": "이미 선점된 좌석입니다" }`
 
 **보안 모드:** `SECURITY DEFINER` (RLS 우회).
+
+---
+
+### `expire_held_seats() → void`
+
+만료된 좌석/예약 자동 정리. pg_cron이 1분마다 자동 호출.
+
+**동작:**
+1. `reservations`: `status='HOLD' AND holding_until < NOW()` → `EXPIRED`
+2. `seats`: `status='HOLD' AND holding_until < NOW()` → `AVAILABLE`, `holding_until=NULL`
+
+**호출 주체:** pg_cron 작업 `expire-held-seats` (매 1분)
+
+**보안 모드:** `SECURITY DEFINER`
+
+---
+
+### `cancel_seat(p_seat_id BIGINT, p_user_id UUID) → JSON`
+
+본인의 활성 HOLD 예약 취소.
+
+**동작:**
+1. `reservations`: 본인의 HOLD → `CANCELLED`, `cancelled_at = NOW()`
+2. 0행 변경이면 → 실패 응답 (본인 예약 없음)
+3. 성공 시 → `seats`: `AVAILABLE`, `holding_until = NULL`
+
+**반환:**
+- 성공: `{ "success": true }`
+- 실패: `{ "success": false, "message": "취소할 예약이 없습니다" }`
+
+**보안 모드:** `SECURITY DEFINER`. WHERE의 `user_id = p_user_id`로 남의 예약 취소 불가.
+
+---
+
+### `get_my_holds(p_user_id UUID) → TABLE`
+
+본인의 활성 HOLD 예약 목록 조회.
+
+**반환 컬럼:** `reservation_id, seat_id, seat_number, pin_code, holding_until`
+
+**호출 예:** `SELECT * FROM get_my_holds('<uuid>');`
+
+**보안 모드:** `SECURITY DEFINER` (RLS 우회).
+
+---
+
+## pg_cron 작업
+
+| 이름 | 주기 | 실행 SQL |
+|------|------|---------|
+| `expire-held-seats` | `* * * * *` (매 1분) | `SELECT expire_held_seats();` |
+
+작업 목록 확인: `SELECT * FROM cron.job;`
 
 ---
 
