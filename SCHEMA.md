@@ -12,6 +12,8 @@
 |-------|-------|------|
 | `seats` | 백엔드 1 | 좌석 현재 상태 |
 | `reservations` | 백엔드 1 | 예약 기록 (이력) |
+| `users` | 백엔드 2 | Supabase Auth 사용자 프로필 + 패널티 집계 |
+| `penalties` | 백엔드 2 | 패널티 이력 |
 | `auth.users` | Supabase 내장 | 인증 유저 (수정 금지) |
 
 ---
@@ -32,7 +34,7 @@
 - `UNIQUE (seat_number)`
 
 ### RLS
-- ⚠️ **현재 비활성화.** Supabase 보안 경고 발생 중. Day 5에 정책 추가 예정.
+- ✅ **활성화됨.** `anon`, `authenticated` 모두 좌석 조회 가능.
 
 ---
 
@@ -58,7 +60,47 @@
 - `FK user_id → auth.users(id)`
 
 ### RLS
-- ✅ **활성화됨.** 현재 정책 없음 → 모든 외부 접근 거절. RPC 함수의 `SECURITY DEFINER`로만 INSERT 가능.
+- ✅ **활성화됨.** 로그인 사용자는 본인 예약만 SELECT 가능. INSERT/UPDATE는 검증된 RPC 함수가 처리.
+
+---
+
+## users
+
+Supabase `auth.users`와 1:1로 연결되는 앱 프로필. Auth 가입 트리거가 자동 생성.
+
+| 컬럼 | 타입 | NULL? | 기본값 | 설명 |
+|------|------|-------|--------|------|
+| `id` | UUID | NO | - | PK, FK → `auth.users(id)` |
+| `email` | TEXT | YES | NULL | Auth 이메일 |
+| `name` | TEXT | YES | NULL | 이름 |
+| `student_id` | TEXT | YES | NULL | 학번, UNIQUE |
+| `penalty_count` | INTEGER | NO | `0` | 누적 패널티 점수 |
+| `is_blocked` | BOOLEAN | NO | `false` | 예약 제한 여부 |
+| `blocked_until` | TIMESTAMPTZ | YES | NULL | 예약 제한 해제 시각 |
+| `created_at` | TIMESTAMPTZ | NO | `NOW()` | 생성 시각 |
+| `updated_at` | TIMESTAMPTZ | NO | `NOW()` | 갱신 시각 |
+
+### RLS
+- ✅ **활성화됨.** 로그인 사용자는 본인 프로필만 SELECT/INSERT/UPDATE 가능.
+
+---
+
+## penalties
+
+패널티 이력. `reservations.status`가 `CANCELLED` 또는 `EXPIRED`로 바뀔 때 트리거로 자동 생성.
+
+| 컬럼 | 타입 | NULL? | 기본값 | 설명 |
+|------|------|-------|--------|------|
+| `id` | BIGSERIAL | NO | - | PK |
+| `user_id` | UUID | NO | - | FK → `users(id)` |
+| `reservation_id` | BIGINT | YES | NULL | FK → `reservations(id)`, UNIQUE |
+| `reason` | TEXT | NO | - | `LATE_CANCEL` / `NO_SHOW` |
+| `points` | INTEGER | NO | - | 1 또는 2 |
+| `note` | TEXT | YES | NULL | 설명 |
+| `created_at` | TIMESTAMPTZ | NO | `NOW()` | 생성 시각 |
+
+### RLS
+- ✅ **활성화됨.** 로그인 사용자는 본인 패널티만 SELECT 가능.
 
 ---
 
@@ -125,6 +167,60 @@
 
 ---
 
+### `reserve_my_seat(p_seat_id BIGINT) → JSON`
+
+로그인된 사용자(`auth.uid()`) 기준 좌석 선점 wrapper.
+
+**동작:**
+1. 미로그인 사용자는 거절
+2. 차단 상태(`is_blocked`, `blocked_until`) 확인
+3. 이미 활성 HOLD 예약이 있으면 거절
+4. 기존 `reserve_seat(p_seat_id, auth.uid())` 호출
+
+---
+
+### `cancel_my_seat(p_seat_id BIGINT) → JSON`
+
+로그인된 사용자 기준 선점 취소 wrapper. 내부에서 `cancel_seat(p_seat_id, auth.uid())` 호출.
+
+---
+
+### `get_current_user_holds() → TABLE`
+
+로그인된 사용자 기준 활성 HOLD 예약 조회. 클라이언트는 더 이상 `p_user_id`를 넘기지 않음.
+
+---
+
+### `verify_pin(p_pin_code TEXT) → JSON`
+
+키오스크 핀코드 인증 RPC.
+
+**동작:**
+1. `reservations.pin_code`와 활성 `HOLD` 예약 매칭
+2. 만료된 핀코드면 `EXPIRED` 처리 후 실패 반환
+3. 성공 시 `reservations.status = OCCUPIED`, `start_time = NOW()`
+4. `seats.status = OCCUPIED`, `holding_until = NULL`
+
+---
+
+### `apply_penalty_for_reservation(p_reservation_id BIGINT) → JSON`
+
+예약 상태를 기준으로 패널티를 계산하고 `penalties`에 기록.
+
+**규칙:**
+- 5분 전 취소: 0점
+- 5분 이후 취소: 1점 (`LATE_CANCEL`)
+- 만료/노쇼 또는 만료 이후 취소: 2점 (`NO_SHOW`)
+- 누적 3점 이상: 7일 예약 제한
+
+---
+
+### `get_my_penalty_summary() → JSON`
+
+로그인된 사용자의 누적 패널티, 제한 상태, 패널티 이력 반환.
+
+---
+
 ## pg_cron 작업
 
 | 이름 | 주기 | 실행 SQL |
@@ -138,8 +234,7 @@
 ## 백엔드 2 협업 가이드
 
 ### 자유롭게 추가해도 OK
-- 새 함수 (`verify_pin`, `apply_penalty` 등)
-- 새 테이블 (`penalties` 등)
+- 백엔드 2 소유 함수/테이블 개선 (`verify_pin`, `apply_penalty_for_reservation`, `penalties` 등)
 - 자기 소유 테이블에 새 컬럼 추가
 
 ### 의논 필요

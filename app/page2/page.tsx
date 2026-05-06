@@ -1,5 +1,7 @@
 'use client'
 
+/* eslint-disable react-hooks/set-state-in-effect */
+
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
@@ -13,12 +15,7 @@ export default function Home() {
   const [seats, setSeats] = useState<Seat[]>([])
   const [loading, setLoading] = useState(false)
 
-  // 좌석 목록 불러오기
-  useEffect(() => {
-    fetchSeats()
-  }, [])
-
-  const fetchSeats = async () => {
+  async function fetchSeats() {
     const { data, error } = await supabase
       .from('seats')
       .select('*')
@@ -27,6 +24,11 @@ export default function Home() {
     if (error) console.error(error)
     else setSeats(data || [])
   }
+
+  // 좌석 목록 불러오기
+  useEffect(() => {
+    fetchSeats()
+  }, [])
 
   // 좌석 예약하기
   const reserveSeat = async (seatId: number) => {

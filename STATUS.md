@@ -30,6 +30,19 @@
 - `cancel_seat(p_seat_id, p_user_id)` — 선점 취소 + cancelled_at 기록
 - `get_my_holds(p_user_id)` — 본인의 활성 HOLD 예약 조회
 
+### Backend 2 — 인증/패널티/핀코드
+- `lib/auth.ts` — Supabase Auth 래퍼 (`signUp`, `signIn`, `signOut`, `getCurrentUser`)
+- `users` 테이블 — Auth 프로필 + 패널티 집계
+- `penalties` 테이블 — 패널티 이력
+- Auth 가입 트리거 — `auth.users` 생성 시 `public.users` 자동 생성
+- `reserve_my_seat(p_seat_id)` — `auth.uid()` 기반 안전 예약 wrapper
+- `cancel_my_seat(p_seat_id)` — `auth.uid()` 기반 안전 취소 wrapper
+- `get_current_user_holds()` — 로그인 사용자 기준 활성 예약 조회
+- `verify_pin(p_pin_code)` — 키오스크 핀코드 인증, `HOLD → OCCUPIED`
+- 패널티 트리거 — `CANCELLED`/`EXPIRED` 전환 시 자동 패널티 계산
+- 동일 유저 다중 좌석 선점 차단 — partial unique index 추가
+- `app/page.tsx` — 임시 `TEST_USER_ID` 제거, 실제 Auth 세션 연결
+
 ### 문서
 - `migrations/001~005.sql` — DB 변경 이력
 - `SCHEMA.md` — 현재 DB 상태 (백 2 공유용)
@@ -42,9 +55,9 @@
 ## ⏳ 다음 작업
 
 ### Day 5 — 마무리
-- 노쇼 시나리오 통합 테스트 (10분 안 가면 자동 해제 + 패널티 — 패널티는 백 2)
-- RLS 정책 추가 (남의 예약 못 보게)
-- 동일 유저 다중 좌석 선점 차단 (백 2 영역이지만 본인도 인지)
+- Supabase SQL Editor에서 `migrations/009_backend2_auth_penalty_pin.sql` 적용
+- 실제 Supabase 프로젝트에서 회원가입→로그인→예약→핀코드 인증→취소/만료 패널티 통합 테스트
+- 프론트2와 키오스크 UI 흐름 최종 문구/에러 메시지 맞추기
 
 ---
 
