@@ -190,9 +190,10 @@ export default function Home() {
         setUser(signedInUser)
         setMessage('로그인되었습니다')
       } else {
-        const { user: signedUpUser, session } = await signUp({ email, password, name, studentId })
-        setUser(session?.user ?? signedUpUser ?? null)
-        setMessage(session ? '회원가입이 완료되었습니다' : '회원가입이 접수되었습니다. 이메일 확인이 필요할 수 있습니다')
+        await signUp({ email, password, name, studentId })
+        setAuthMode('signin')
+        setPassword('')
+        setMessage('회원가입이 완료되었습니다')
       }
 
       setPassword('')
