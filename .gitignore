@@ -45,6 +45,7 @@ next-env.d.ts
 session-report-*.html
 
 # 개인 클로드 설정.
+.claude/
 # 개인용 학습 노트 (팀 공유 X)
 LEARNING.md
 HOW_TO_LEARN.md
