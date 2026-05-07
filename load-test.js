@@ -23,7 +23,7 @@ export const options = {
   },
 }
 
-export default function () {
+export default function reserveSeatLoadTest() {
   const url = `${SUPABASE_URL}/rest/v1/rpc/reserve_seat`
 
   // RPC 함수에 전달할 파라미터 (DB 함수의 인자명과 동일하게)
