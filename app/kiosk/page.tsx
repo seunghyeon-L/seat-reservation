@@ -104,6 +104,32 @@ export default function Home() {
     { id: 8, label: 'H 테이블', seats: [29, 30] }, // 마지막 남은 2개 좌석
   ]
 
+  // 🌟 [추가 1] 10분 실시간 카운트다운 타이머 로직
+  const [secondsLeft, setSecondsLeft] = useState<number>(600) // 10분 = 600초 기본값
+
+  useEffect(() => {
+  if (myHolds.length === 0) {
+    setSecondsLeft(600) // 예약이 없으면 10분으로 초기화
+    return
+  }
+
+  // 1초마다 숫자를 깎아주는 타이머 구동
+  const interval = setInterval(() => {
+    setSecondsLeft((prev) => {
+      if (prev <= 1) {
+        clearInterval(interval)
+        return 0 // 0초가 되면 멈춤
+      }
+      return prev - 1
+    })
+  }, 1000)
+
+    return () => clearInterval(interval)
+  }, [myHolds])
+
+  // 초(seconds) 데이터를 "09:59" 형태로 보기 좋게 변환해 주는 변수
+  const formattedTime = `${String(Math.floor(secondsLeft / 60)).padStart(2, '0')}:${String(secondsLeft % 60).padStart(2, '0')}`
+
   // 🌟 3.5초 페이드아웃 스플래시 타이머
   useEffect(() => {
     const fadeTimer = setTimeout(() => {
@@ -495,7 +521,14 @@ export default function Home() {
                     <div key={hold.reservation_id} className="flex items-center justify-between bg-black/40 p-2 rounded-lg">
                       <div>
                         <span className="font-bold text-white">{hold.seat_number}번 좌석</span>
-                        <p className="text-[10px] text-neutral-400">핀코드: {hold.pin_code} | 만료: {new Date(hold.holding_until).toLocaleTimeString()}</p>
+                        
+                        {/* 🌟 기존 남은 시간 텍스트 자리에 formattedTime 타이머 매핑 */}
+                        <p className="text-[10px] text-neutral-400 mt-0.5">
+                          핀코드: <span className="font-mono text-blue-400 font-bold">{hold.pin_code}</span> | 
+                          남은 시간: <span className="font-mono text-red-400 font-bold ml-1">{formattedTime}</span>
+                        </p>
+                        
+                        {/* <p className="text-[10px] text-neutral-400">핀코드: {hold.pin_code} | 만료: {new Date(hold.holding_until).toLocaleTimeString()}</p> */}
                       </div>
                       <button
                         type="button"
@@ -537,11 +570,21 @@ export default function Home() {
                         {table.seats.slice(0, 2).map((seatNumber) => {
                           const seat = seats.find((s) => s.seat_number === seatNumber)
                           const isSelected = selectedSeatId === seat?.id
+
+                          // 🔥 내가 예약 중(HOLD)인 자리이거나, 이미 인증해서 식사 중(OCCUPIED)인 진짜 내 자리인지 상시 체크
+                          const isMyOwnSeat = seat && user && (
+                            myHolds.some((h) => h.seat_id === seat.id) || 
+                            (seat.status === 'OCCUPIED' && (seat as any).user_id === user.id)
+                          )
+
                           if (!seat) return <div key={seatNumber} className="h-8 w-8 rounded bg-gray-100" />
 
                           let bgClass = 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-100'
                           if (isSelected) {
                             bgClass = 'bg-amber-400 text-gray-900 ring-2 ring-blue-600 scale-110 shadow-md z-10'
+                          } else if (isMyOwnSeat) {
+                            // 🔥 로그인해 있는 동안 '내 자리'는 예약을 했든 밥을 먹든 무조건 "짙은 파란색 + 광채 테두리"로 상시 강조!
+                            bgClass = 'bg-blue-600 text-white font-black border-none ring-4 ring-blue-600/30 shadow-lg shadow-blue-600/20 scale-105 z-10'
                           } else if (seat.status === 'HOLD') {
                             bgClass = 'bg-blue-100 text-blue-700 border border-blue-200 cursor-not-allowed'
                           } else if (seat.status === 'OCCUPIED') {
@@ -570,14 +613,28 @@ export default function Home() {
                         {table.seats.slice(2, 4).map((seatNumber) => {
                           const seat = seats.find((s) => s.seat_number === seatNumber)
                           const isSelected = selectedSeatId === seat?.id
-                          if (!seat) return null
+
+                          // 🔥 내 예약 리스트에 '실제 존재하는 좌석'이거나, 상태가 OCCUPIED이면서 내 ID와 100% 매칭될 때만 TRUE
+                          const isMyOwnSeat = user && seat && (
+                            (seat.status === 'HOLD' && myHolds.some((h) => h.seat_id === seat.id)) || 
+                            (seat.status === 'OCCUPIED' && (seat as any).user_id === user.id)
+                          )
+                          if (!seat) return <div key={seatNumber} className="h-8 w-8 rounded bg-gray-100" />
+                          // 🔥
 
                           let bgClass = 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-100'
                           if (isSelected) {
+                            // 1순위: 터치해서 '선택 중'인 노란색 상태
                             bgClass = 'bg-amber-400 text-gray-900 ring-2 ring-blue-600 scale-110 shadow-md z-10'
+                          } else if (isMyOwnSeat) {
+                          // 🔥 2순위 (상시 고정): 내 좌석에 테마 적용
+                            bgClass = 'bg-[#E2E8F0] text-black font-black border-none ring-4 ring-blue-600/40 shadow-lg shadow-blue-600/20 scale-105 z-10'
+                          // 🔥
                           } else if (seat.status === 'HOLD') {
+                            // 3순위: '다른 계정 유저'가 앱으로 선점 중인 일반 연파란색 상태
                             bgClass = 'bg-blue-100 text-blue-700 border border-blue-200 cursor-not-allowed'
                           } else if (seat.status === 'OCCUPIED') {
+                            // 4순위: '다른 계정 유저'가 핀코드 인증하고 밥 먹는 일반 빨간색 상태
                             bgClass = 'bg-red-100 text-red-700 border border-red-200 cursor-not-allowed'
                           }
 
@@ -606,7 +663,6 @@ export default function Home() {
                 <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-3">
                   <h3 className="mb-2 text-xs font-bold">현장 키오스크 인증</h3>
                   <form onSubmit={(event) => void verifyPin(event)} className="flex gap-2">
-                    {/* 핀코드 입력창 (선택 시 블루 테두리 포커스) */}
                     <input
                       value={kioskPin}
                       onChange={(event) => setKioskPin(event.target.value.replace(/\D/g, '').slice(0, 6))}
@@ -615,11 +671,10 @@ export default function Home() {
                       placeholder="6자리 핀코드"
                       className="min-w-0 flex-1 rounded-lg border border-neutral-700 bg-black px-3 py-1.5 font-mono text-xs outline-none focus:border-cyan-400"
                     />
-                    {/* 메인 블루 컬러를 적용한 확정 버튼 */}
                     <button
                       type="submit"
                       disabled={loading}
-                      className="rounded-lg bg-neutral-800/80 px-3 py-1.5 text-xs font-bold text-blue-400 hover:bg-neutral-700 hover:text-blue-300 disabled:opacity-50"
+                      className="rounded-lg bg-cyan-400 px-3 py-1.5 text-xs font-bold text-neutral-950 hover:bg-cyan-300"
                     >
                       확인
                     </button>
@@ -667,6 +722,7 @@ export default function Home() {
             </div>
           )}
         </footer>
+
       </div>
     </div>
   )
