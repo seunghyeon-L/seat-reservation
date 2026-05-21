@@ -74,7 +74,7 @@ export default function Home() {
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
   const [studentId, setStudentId] = useState('')
-  //const [kioskPin, setKioskPin] = useState('')
+  const [kioskPin, setKioskPin] = useState('')
   const [message, setMessage] = useState('')
 
   // 🌟 스플래시 가시성 및 애니메이션 제어
@@ -337,31 +337,32 @@ export default function Home() {
     setLoading(false)
   }
 
-  // const verifyPin = async (event: FormEvent<HTMLFormElement>) => {
-  //   event.preventDefault()
+  // 🌟 현장 키오스크 핀코드 DB 검증 핸들러
+  const verifyPin = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
 
-  //   if (!kioskPin.trim()) {
-  //     setMessage('핀코드를 입력하세요')
-  //     return
-  //   }
+    if (!kioskPin.trim()) {
+      setMessage('핀코드를 입력하세요')
+      return
+    }
 
-  //   setLoading(true)
-  //   setMessage('')
+    setLoading(true)
+    setMessage('')
 
-  //   const { data, error } = await supabase.rpc('verify_pin', { p_pin_code: kioskPin.trim() })
+    const { data, error } = await supabase.rpc('verify_pin', { p_pin_code: kioskPin.trim() })
 
-  //   if (error) {
-  //     console.error(error)
-  //     setMessage('핀코드 인증 실패: 서버 오류가 발생했습니다')
-  //   } else {
-  //     const result = data as RpcResult | null
-  //     setMessage(result?.success ? result.message ?? '좌석이 확정되었습니다' : `핀코드 인증 실패: ${result?.message}`)
-  //     if (result?.success) setKioskPin('')
-  //   }
+    if (error) {
+      console.error(error)
+      setMessage('핀코드 인증 실패: 서버 오류가 발생했습니다')
+    } else {
+      const result = data as RpcResult | null
+      setMessage(result?.success ? result.message ?? '좌석이 확정되었습니다' : `핀코드 인증 실패: ${result?.message}`)
+      if (result?.success) setKioskPin('')
+    }
 
-  //   await refreshReservationState()
-  //   setLoading(false)
-  // }
+    await refreshReservationState()
+    setLoading(false)
+  }
 
   return (
     <div className="flex min-h-screen justify-center bg-white text-neutral-100 antialiased">
@@ -601,10 +602,11 @@ export default function Home() {
 
               {/* 노쇼 벌점 현황 조회 슬롯 */}
               <div className="mt-2 grid gap-4 border-t border-neutral-900 pt-4">
-                {/* 키오스크 통합 인증
+                {/* 🌟 현장 키오스크 통합 인증 패널 */}
                 <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-3">
                   <h3 className="mb-2 text-xs font-bold">현장 키오스크 인증</h3>
                   <form onSubmit={(event) => void verifyPin(event)} className="flex gap-2">
+                    {/* 핀코드 입력창 (선택 시 블루 테두리 포커스) */}
                     <input
                       value={kioskPin}
                       onChange={(event) => setKioskPin(event.target.value.replace(/\D/g, '').slice(0, 6))}
@@ -613,15 +615,16 @@ export default function Home() {
                       placeholder="6자리 핀코드"
                       className="min-w-0 flex-1 rounded-lg border border-neutral-700 bg-black px-3 py-1.5 font-mono text-xs outline-none focus:border-cyan-400"
                     />
+                    {/* 메인 블루 컬러를 적용한 확정 버튼 */}
                     <button
                       type="submit"
                       disabled={loading}
-                      className="rounded-lg bg-cyan-400 px-3 py-1.5 text-xs font-bold text-neutral-950 hover:bg-cyan-300"
+                      className="rounded-lg bg-neutral-800/80 px-3 py-1.5 text-xs font-bold text-blue-400 hover:bg-neutral-700 hover:text-blue-300 disabled:opacity-50"
                     >
                       확인
                     </button>
                   </form>
-                </div> */}
+                </div>
 
                 {/* 실시간 패널티 점수 조회 */}
                 <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-3 text-xs">
@@ -664,7 +667,6 @@ export default function Home() {
             </div>
           )}
         </footer>
-
       </div>
     </div>
   )
