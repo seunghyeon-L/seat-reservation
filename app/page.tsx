@@ -1,7 +1,7 @@
 'use client'
 
 import type { FormEvent } from 'react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { getCurrentUser, signIn, signOut, signUp, type UserProfile } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
@@ -73,6 +73,8 @@ export default function Home() {
   const [seats, setSeats] = useState<Seat[]>([])
   const [myHolds, setMyHolds] = useState<MyHold[]>([])
   const [myOccupied, setMyOccupied] = useState<MyOccupied[]>([])
+  // 내가 가진 좌석 id 집합 — Realtime 콜백에서 stale closure 없이 참조
+  const mySeatIdsRef = useRef<Set<number>>(new Set())
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [penaltySummary, setPenaltySummary] = useState<PenaltySummary | null>(null)
   const [user, setUser] = useState<User | null>(null)
@@ -174,6 +176,12 @@ export default function Home() {
             ? prev.map((s) => (s.id === changed.id ? { ...s, ...changed } : s))
             : [...prev, changed].sort((a, b) => a.seat_number - b.seat_number)
         )
+        // 바뀐 좌석이 "내 좌석"이면(키오스크 확정·만료 등) → 내 예약/착석만 갱신
+        // (남의 좌석 변경엔 안 부름 → 팬아웃은 유지)
+        if (mySeatIdsRef.current.has(changed.id)) {
+          void fetchMyHolds()
+          void fetchMyOccupied()
+        }
       })
       .subscribe()
 
@@ -185,6 +193,14 @@ export default function Home() {
   useEffect(() => {
     void refreshReservationState()
   }, [user?.id])
+
+  // 내 예약/착석이 바뀔 때마다 "내 좌석 id" 집합 동기화 (Realtime 콜백용)
+  useEffect(() => {
+    mySeatIdsRef.current = new Set([
+      ...myHolds.map((h) => h.seat_id),
+      ...myOccupied.map((o) => o.seat_id),
+    ])
+  }, [myHolds, myOccupied])
 
   // 유저 로그인 상태 변화에 따른 마이페이지 데이터 갱신
   const refreshReservationState = async () => {
