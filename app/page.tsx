@@ -26,6 +26,14 @@ type MyHold = {
   holding_until: string // 자동 취소 마감 시간
 }
 
+// 유저가 착석(OCCUPIED) 중인 좌석 데이터 (체크아웃 대상)
+type MyOccupied = {
+  reservation_id: number
+  seat_id: number
+  seat_number: number
+  start_time: string | null // 키오스크 인증(착석) 시각
+}
+
 // 백엔드 RPC 통신 결과 처리용
 type RpcResult = {
   success?: boolean
@@ -64,6 +72,7 @@ export default function Home() {
   /* 💡 글로벌 상태 관리 (State) */
   const [seats, setSeats] = useState<Seat[]>([])
   const [myHolds, setMyHolds] = useState<MyHold[]>([])
+  const [myOccupied, setMyOccupied] = useState<MyOccupied[]>([])
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [penaltySummary, setPenaltySummary] = useState<PenaltySummary | null>(null)
   const [user, setUser] = useState<User | null>(null)
@@ -156,8 +165,15 @@ export default function Home() {
 
     const channel = supabase
       .channel('seats-channel')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'seats' }, () => {
-        void refreshReservationState()
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'seats' }, (payload) => {
+        // 🔧 팬아웃 해결: 전체 재요청 대신 "바뀐 좌석 1행"만 로컬 state에 패치
+        const changed = payload.new as Seat
+        if (changed?.id == null) return
+        setSeats((prev) =>
+          prev.some((s) => s.id === changed.id)
+            ? prev.map((s) => (s.id === changed.id ? { ...s, ...changed } : s))
+            : [...prev, changed].sort((a, b) => a.seat_number - b.seat_number)
+        )
       })
       .subscribe()
 
@@ -176,12 +192,20 @@ export default function Home() {
 
     if (!user) {
       setMyHolds([])
+      setMyOccupied([])
       setPenaltySummary(null)
       setProfile(null)
       return
     }
 
-    await Promise.all([fetchMyHolds(), fetchPenaltySummary(), fetchProfile()])
+    await Promise.all([fetchMyHolds(), fetchMyOccupied(), fetchPenaltySummary(), fetchProfile()])
+  }
+
+  // 내 액션(예약/취소/체크아웃) 후 — "내 데이터"만 가볍게 갱신.
+  // 좌석맵 자체는 Realtime이 1행씩 패치하므로 fetchSeats 안 함 (팬아웃 방지).
+  const refreshMyData = async () => {
+    if (!user) return
+    await Promise.all([fetchMyHolds(), fetchMyOccupied(), fetchPenaltySummary()])
   }
 
   // 데이터베이스 좌석 전체 레코드 로드
@@ -226,6 +250,18 @@ export default function Home() {
     }
 
     setMyHolds(data || [])
+  }
+
+  // 유저가 착석(OCCUPIED) 중인 좌석 조회 (체크아웃 버튼용)
+  const fetchMyOccupied = async () => {
+    const { data, error } = await supabase.rpc('get_current_user_occupied')
+
+    if (error) {
+      console.error(error)
+      return
+    }
+
+    setMyOccupied(data || [])
   }
 
   // 누적 노쇼 벌점 스택 조회
@@ -277,6 +313,7 @@ export default function Home() {
       setUser(null)
       setProfile(null)
       setMyHolds([])
+      setMyOccupied([])
       setPenaltySummary(null)
       setSelectedSeatId(null)
       setMessage('로그아웃되었습니다')
@@ -312,7 +349,7 @@ export default function Home() {
       }
     }
 
-    await refreshReservationState()
+    await refreshMyData()
     setLoading(false)
   }
 
@@ -333,7 +370,32 @@ export default function Home() {
       setMessage(result?.success ? '예약을 취소했습니다' : `취소 실패: ${result?.message ?? '알 수 없는 오류'}`)
     }
 
-    await refreshReservationState()
+    await refreshMyData()
+    setLoading(false)
+  }
+
+  // 식사 종료 후 좌석 비우기(체크아웃) 핸들러
+  const checkoutSeat = async (seatId: number) => {
+    if (!confirm('식사를 마치고 좌석을 비울까요?')) return
+
+    setLoading(true)
+    setMessage('')
+
+    const { data, error } = await supabase.rpc('checkout_my_seat', { p_seat_id: seatId })
+
+    if (error) {
+      console.error(error)
+      setMessage('체크아웃 실패: 서버 오류가 발생했습니다')
+    } else {
+      const result = data as RpcResult | null
+      setMessage(result?.success ? '체크아웃되었습니다' : `체크아웃 실패: ${result?.message ?? '알 수 없는 오류'}`)
+    }
+
+    // 즉시 반응: 체크아웃한 좌석을 화면에서 바로 제거 (낙관적 업데이트)
+    setMyOccupied((prev) => prev.filter((o) => o.seat_id !== seatId))
+    setSeats((prev) => prev.map((s) => (s.id === seatId ? { ...s, status: 'AVAILABLE' } : s)))
+
+    await refreshMyData()
     setLoading(false)
   }
 
@@ -503,6 +565,29 @@ export default function Home() {
                         className="rounded bg-red-500/80 px-2 py-1 text-[10px] font-bold text-white hover:bg-red-400"
                       >
                         취소
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* 착석(OCCUPIED) 중인 내 좌석 — 체크아웃 */}
+              {myOccupied.length > 0 && (
+                <div className="rounded-xl border border-green-900 bg-green-950/30 p-3 text-xs">
+                  <h2 className="mb-2 font-bold text-green-300">식사 중 좌석</h2>
+                  {myOccupied.map((occ) => (
+                    <div key={occ.reservation_id} className="flex items-center justify-between bg-black/40 p-2 rounded-lg">
+                      <div>
+                        <span className="font-bold text-white">{occ.seat_number}번 좌석</span>
+                        <p className="text-[10px] text-neutral-400">확정: {occ.start_time ? new Date(occ.start_time).toLocaleTimeString() : '-'}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void checkoutSeat(occ.seat_id)}
+                        disabled={loading}
+                        className="rounded bg-emerald-500/80 px-2 py-1 text-[10px] font-bold text-white hover:bg-emerald-400"
+                      >
+                        체크아웃
                       </button>
                     </div>
                   ))}
